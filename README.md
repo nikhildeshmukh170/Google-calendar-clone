@@ -1,4 +1,4 @@
-# 📅 Calendar Pro - Event Management System
+# 📅 Calendar - Event Management System
 
 <div align="center">
 

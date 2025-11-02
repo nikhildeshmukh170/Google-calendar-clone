@@ -96,7 +96,133 @@
 
 ## 🏗️ Architecture
 
-This project uses a **microservice architecture** with separate backend and frontend:
+### System Overview
+
+```mermaid
+graph TB
+    subgraph "Frontend Layer"
+        UI[User Interface]
+        RC[React Components]
+        AS[API Service]
+        CS[Cache Service]
+    end
+
+    subgraph "Backend Layer"
+        API[Express API]
+        VM[Validation Middleware]
+        RL[Rate Limiter]
+        PS[Prisma Service]
+    end
+
+    subgraph "Database Layer"
+        PG[PostgreSQL Database]
+        C[Cache]
+    end
+
+    UI --> RC
+    RC --> AS
+    AS --> CS
+    CS --> AS
+    AS --> API
+    API --> VM
+    VM --> RL
+    RL --> PS
+    PS --> PG
+    CS --> C
+```
+
+### Data Flow Architecture
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend
+    participant BE as Backend API
+    participant DB as Database
+    participant C as Cache
+
+    U->>FE: Interact with Calendar
+    FE->>C: Check Cache
+    alt Cache Hit
+        C-->>FE: Return Cached Data
+    else Cache Miss
+        FE->>BE: API Request
+        BE->>DB: Query Data
+        DB-->>BE: Return Data
+        BE-->>FE: Send Response
+        FE->>C: Update Cache
+    end
+    FE-->>U: Update UI
+```
+
+### Event Creation Flow
+
+```mermaid
+stateDiagram-v2
+    [*] --> EventModal
+    EventModal --> Validation
+    
+    state Validation {
+        [*] --> ValidateFields
+        ValidateFields --> CheckDate
+        CheckDate --> CheckConflicts
+        CheckConflicts --> [*]
+    }
+    
+    Validation --> API_Request
+    
+    state API_Request {
+        [*] --> SendData
+        SendData --> HandleResponse
+        HandleResponse --> UpdateCache
+        UpdateCache --> [*]
+    }
+    
+    API_Request --> UpdateUI
+    UpdateUI --> [*]
+```
+
+### Component Architecture
+
+```mermaid
+graph TD
+    subgraph "Page Components"
+        CP[Calendar Page]
+        MP[Month View]
+        WP[Week View]
+        DP[Day View]
+    end
+
+    subgraph "Feature Components"
+        EM[Event Modal]
+        SB[Search Bar]
+        SD[Sidebar]
+        QT[Quick Templates]
+    end
+
+    subgraph "Service Layer"
+        ES[Event Service]
+        CS[Cache Service]
+        AS[Auth Service]
+    end
+
+    subgraph "State Management"
+        EV[Events]
+        UI[UI State]
+        US[User Settings]
+    end
+
+    CP --> MP & WP & DP
+    CP --> EM & SB & SD & QT
+    EM & SB & SD --> ES
+    ES --> CS
+    ES --> AS
+    ES --> EV
+    UI --> CP
+    US --> CP
+```
+
+### Project Structure
 
 ```
 Google-calendar-clone/
@@ -112,6 +238,187 @@ Google-calendar-clone/
 │   │   └── holidays.ts # Indian holidays data
 │   └── public/       # Static assets (logo, icons)
 └── README.md
+```
+
+### Authentication Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend
+    participant BE as Backend
+    participant DB as Database
+
+    U->>FE: Access Protected Route
+    FE->>BE: Check Auth Status
+    BE->>DB: Validate Session
+    alt Valid Session
+        DB-->>BE: Session Valid
+        BE-->>FE: Auth Confirmed
+        FE-->>U: Access Granted
+    else Invalid Session
+        DB-->>BE: Session Invalid
+        BE-->>FE: Auth Failed
+        FE->>U: Redirect to Login
+    end
+```
+
+### Core System Workflows
+
+#### 1. Event Management Flow
+```mermaid
+flowchart TD
+    Start([User Action]) --> A{Event Type}
+    
+    A -->|Create| B[Open Event Modal]
+    A -->|Edit| C[Load Existing Event]
+    A -->|Delete| D[Confirm Dialog]
+    
+    B --> E[Validate Input]
+    C --> E
+    D --> F[Send Delete Request]
+    
+    E -->|Valid| G[Save to Backend]
+    E -->|Invalid| B
+    
+    G --> H{Success?}
+    F --> H
+    
+    H -->|Yes| I[Update UI]
+    H -->|No| J[Show Error]
+    
+    I --> K[Update Cache]
+    I --> L[Show Toast]
+    
+    style Start fill:#f9f,stroke:#333
+    style H decision
+```
+
+#### 2. Calendar Navigation System
+```mermaid
+flowchart LR
+    A[User Navigation] --> B{View Type}
+    B -->|Month| C[Load Month View]
+    B -->|Week| D[Load Week View]
+    B -->|Day| E[Load Day View]
+    
+    C --> F[Fetch Events]
+    D --> F
+    E --> F
+    
+    F --> G{Cache Valid?}
+    G -->|Yes| H[Use Cache]
+    G -->|No| I[API Request]
+    
+    H --> J[Render View]
+    I --> K[Update Cache]
+    K --> J
+    
+    style B decision
+    style G decision
+```
+
+#### 3. Task Completion System
+```mermaid
+flowchart TD
+    Start([Mark Task Complete]) --> A[Update UI]
+    A --> B[Show Animation]
+    B --> C[Send to Backend]
+    
+    C --> D{Success?}
+    D -->|Yes| E[Update Cache]
+    D -->|No| F[Revert UI]
+    
+    E --> G[Calculate Stats]
+    G --> H[Update Progress]
+    H --> I[Show Celebration]
+    
+    F --> J[Show Error]
+    
+    style Start fill:#f9f,stroke:#333
+    style D decision
+```
+
+#### 4. Data Synchronization Flow
+```mermaid
+flowchart TD
+    A[Client Request] --> B{Check Connection}
+    B -->|Online| C[Check Cache Age]
+    B -->|Offline| D[Use Cache]
+    
+    C -->|Valid| E[Use Cache + Background Sync]
+    C -->|Expired| F[Fetch Fresh Data]
+    
+    F --> G{Rate Limited?}
+    G -->|Yes| H[Queue Request]
+    G -->|No| I[Make Request]
+    
+    H --> J[Process Queue]
+    I --> K[Update Cache]
+    
+    E --> L[Update UI]
+    D --> L
+    K --> L
+    
+    style B decision
+    style G decision
+```
+
+#### 5. Error Handling System
+```mermaid
+flowchart TD
+    A[Error Occurs] --> B{Error Type}
+    
+    B -->|Network| C[Check Connection]
+    B -->|Validation| D[Show Field Errors]
+    B -->|Auth| E[Redirect Login]
+    B -->|Rate Limit| F[Queue Request]
+    
+    C --> G{Can Retry?}
+    G -->|Yes| H[Retry Request]
+    G -->|No| I[Show Error]
+    
+    D --> J[Focus Invalid Field]
+    E --> K[Save Return URL]
+    F --> L[Process Queue]
+    
+    H --> M[Update UI]
+    I --> M
+    J --> M
+    K --> M
+    L --> M
+    
+    style B decision
+    style G decision
+```
+
+#### 6. Request Deduplication System
+```mermaid
+flowchart TD
+    A[Request] --> B{In-flight?}
+    B -->|Yes| C[Return Existing Promise]
+    B -->|No| D{Cached?}
+    D -->|Yes| E[Return Cached Data]
+    D -->|No| F[Make API Request]
+    F --> G[Store Response]
+    G --> H[Return Data]
+    
+    subgraph "Cache Management"
+        I[ETag Validation]
+        J[Session Storage]
+        K[TTL Check]
+        I --> J --> K
+    end
+    
+    subgraph "Rate Control"
+        L[Request Counter]
+        M[Time Window]
+        N[Queue System]
+        L --> M --> N
+    end
+    
+    style B decision
+    style D decision
 ```
 
 ### Request Flow & Deduplication

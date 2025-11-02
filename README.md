@@ -114,6 +114,58 @@ Google-calendar-clone/
 └── README.md
 ```
 
+### Request Flow & Deduplication
+
+```mermaid
+flowchart TD
+    A[Client Request] --> B{In-flight Request?}
+    B -->|Yes| C[Return Existing Promise]
+    B -->|No| D{Check Cache}
+    D -->|Hit| E[Return Cached Data]
+    D -->|Miss| F{Rate Limited?}
+    F -->|Yes| G[Wait for Window]
+    F -->|No| H[Make API Request]
+    G --> H
+    H --> I[Store Response]
+    I --> J[Return Data]
+    
+    subgraph "Request Deduplication"
+        K[Method + URL + Body] --> L[Compute Key]
+        L --> M[Track In-flight Map]
+    end
+    
+    subgraph "Caching Layer"
+        N[ETag] --> O[Session Storage]
+        O --> P[TTL Check]
+    end
+    
+    subgraph "Rate Limiting"
+        Q[Request Count] --> R[Time Window]
+        R --> S[Delay If Needed]
+    end
+```
+
+### Event Service Flow
+
+```mermaid
+flowchart LR
+    A[Calendar Component] --> B[EventService]
+    B --> C{Cache Valid?}
+    C -->|Yes| D[Return Cache]
+    C -->|No| E[Fetch Events]
+    E --> F[API Client]
+    F --> G{Success?}
+    G -->|Yes| H[Update Cache]
+    G -->|No| I[Return Last Known]
+    H --> J[Return Fresh Data]
+    I --> J
+    
+    subgraph "Singleton Pattern"
+        K[getInstance] --> L[Single Instance]
+        L --> M[Shared State]
+    end
+```
+
 ---
 
 ## 🛠️ Tech Stack

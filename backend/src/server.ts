@@ -3,8 +3,11 @@ dotenv.config();
 
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import fs from 'fs';
 import eventsRouter from './routes/events';
 import usersRouter from './routes/users';
+import { prisma } from './lib/prisma';
 import { rateLimiter, contentTypeValidator } from './lib/middleware/apiMiddleware';
 
 const app = express();
@@ -20,6 +23,58 @@ app.use(contentTypeValidator);
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Debug route to check database status
+app.get('/debug/db', async (req, res) => {
+  try {
+    const dbInfo: any = {
+      env: {
+        NODE_ENV: process.env.NODE_ENV,
+        DATABASE_URL: process.env.DATABASE_URL,
+        PWD: process.cwd(),
+      },
+      sqlite: null,
+      tables: null,
+    };
+
+    // Check SQLite file if using file:// URL
+    if (process.env.DATABASE_URL?.startsWith('file:')) {
+      const filePath = process.env.DATABASE_URL.replace(/^file:\/\//, '').replace(/^file:/, '');
+      const resolved = path.resolve(filePath);
+      const exists = fs.existsSync(resolved);
+      
+      dbInfo.sqlite = {
+        resolvedPath: resolved,
+        exists,
+        size: exists ? fs.statSync(resolved).size : null,
+        permissions: exists ? fs.statSync(resolved).mode.toString(8) : null
+      };
+    }
+
+    // Test table query
+    try {
+      await prisma.user.findFirst({ take: 1 });
+      dbInfo.tables = { user: true };
+    } catch (e: any) {
+      dbInfo.tables = { 
+        error: e.message,
+        code: e.code,
+        meta: e.meta
+      };
+    }
+
+    res.json({
+      success: true,
+      debug: dbInfo
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
 });
 
 // Root / - provide a simple helpful response for deployments (Render, Heroku, etc.)

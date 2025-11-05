@@ -19,6 +19,17 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Root / - provide a simple helpful response for deployments (Render, Heroku, etc.)
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Google Calendar Clone Backend',
+    info: 'Available routes: /health, /api/users, /api/events',
+    health: '/health',
+    apiBase: '/api',
+  });
+});
+
 // API Routes
 app.use('/api/users', usersRouter);
 app.use('/api/events', eventsRouter);
